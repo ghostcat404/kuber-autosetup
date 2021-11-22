@@ -5,34 +5,58 @@
      apt:
        name: docker.io
        state: present
-       update_cache: true
+       update_cache: yes
+   - name: change docker cgroup to systemd
+     shell: |
+      cat <<EOF | sudo tee /etc/docker/daemon.json
+      {
+        "exec-opts": ["native.cgroupdriver=systemd"],
+        "log-driver": "json-file",
+        "log-opts": {
+          "max-size": "100m"
+        },
+        "storage-driver": "overlay2"
+      }
+      EOF
+   - name: Restart docker
+     shell: systemctl restart docker
 
    - name: install APT Transport HTTPS
      apt:
-       name: apt-transport-https
+       pkg:
+        - apt-transport-https
+        - ca-certificates
+        - curl
        state: present
+       update_cache: yes
 
-   - name: add Kubernetes apt-key
-     apt_key:
-       url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
-       state: present
+   - name: Download the Google Cloud public signing key
+     shell: curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
 
-   - name: add Kubernetes' APT repository
-     apt_repository:
-      repo: deb http://apt.kubernetes.io/ kubernetes-xenial main
-      state: present
-      filename: 'kubernetes'
+   - name: Add the Kubernetes apt repository
+     shell: echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
 
    - name: install kubelet
      apt:
        name: kubelet
        state: present
-       update_cache: true
+       update_cache: yes
 
    - name: install kubeadm
      apt:
        name: kubeadm
        state: present
+       update_cache: yes
+
+   - name: Hold kubeadm
+     dpkg_selections:
+       name: kubeadm
+       selection: hold
+
+   - name: Hold kubelet
+     dpkg_selections:
+       name: kubelet
+       selection: hold
 
 - hosts: master
   become: yes
@@ -41,4 +65,10 @@
      apt:
        name: kubectl
        state: present
+       update_cache: yes
        force: yes
+
+   - name: Hold kubectl
+     dpkg_selections:
+       name: kubectl
+       selection: hold
